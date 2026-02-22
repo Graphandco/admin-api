@@ -3,7 +3,7 @@
  */
 
 const express = require('express');
-const { wpCliExec } = require('../lib/wp-cli');
+const { wpCliExec, execInContainer } = require('../lib/wp-cli');
 
 const router = express.Router();
 
@@ -80,6 +80,59 @@ router.get('/info', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Erreur lors de la récupération des infos',
+      message: err.message,
+    });
+  }
+});
+
+/**
+ * GET /site-info - Infos d'un site (titre, logo, url) - ?url= obligatoire
+ */
+router.get('/site-info', async (req, res) => {
+  try {
+    const url = req.query.url;
+    if (!url) {
+      return res.status(400).json({ success: false, error: 'Paramètre url requis' });
+    }
+    const [nameRes, taglineRes, sitesRes] = await Promise.all([
+      wpCliExec(['option', 'get', 'blogname'], { url, format: false }),
+      wpCliExec(['option', 'get', 'blogdescription'], { url, format: false }),
+      wpCliExec(['site', 'list'], { format: 'json' }),
+    ]);
+    const site_name = nameRes.exitCode === 0 && nameRes.stdout ? nameRes.stdout.trim() : null;
+    const tagline = taglineRes.exitCode === 0 && taglineRes.stdout ? taglineRes.stdout.trim() : null;
+    // Icône du site (Réglages > Général > Icône du site) - wp option get + wp post list
+    let logo_url = null;
+    try {
+      const iconRes = await wpCliExec(['option', 'get', 'site_icon'], { url, format: false });
+      if (iconRes.exitCode === 0 && iconRes.stdout) {
+        const attachmentId = iconRes.stdout.trim();
+        if (attachmentId && attachmentId !== '0') {
+          const postRes = await wpCliExec(
+            ['post', 'list', '--post_type=attachment', '--post__in=' + attachmentId, '--field=url'],
+            { url, format: false }
+          );
+          if (postRes.exitCode === 0 && postRes.stdout) {
+            logo_url = postRes.stdout.trim() || null;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    res.json({
+      success: true,
+      site_name,
+      tagline: tagline || null,
+      url,
+      logo_url,
+      admin_url: url.replace(/\/?$/, '') + '/wp-admin',
+    });
+  } catch (err) {
+    console.error('wp site-info error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération des infos du site',
       message: err.message,
     });
   }
@@ -210,6 +263,194 @@ router.get('/recent-changes', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Erreur lors de la récupération des modifications récentes',
+      message: err.message,
+    });
+  }
+});
+
+/**
+ * GET /connexions - 10 dernières connexions au backoffice (sessions actives)
+ */
+router.get('/connexions', async (req, res) => {
+  try {
+    const php = [
+      '$site_map = [];',
+      'if (is_multisite()) {',
+      '  $sites = get_sites([\'number\' => 500]);',
+      '  foreach ($sites as $site) {',
+      '    $bid = (int) $site->blog_id;',
+      '    switch_to_blog($bid);',
+      '    $site_map[$bid] = [\'url\' => get_site_url($bid), \'name\' => get_bloginfo(\'name\') ?: get_site_url($bid)];',
+      '    restore_current_blog();',
+      '  }',
+      '} else {',
+      '  $site_map[1] = [\'url\' => home_url(), \'name\' => get_bloginfo(\'name\')];',
+      '}',
+      '$results = [];',
+      '$users = get_users([\'number\' => 100]);',
+      'foreach ($users as $user) {',
+      '  $tokens = WP_Session_Tokens::get_instance($user->ID);',
+      '  if (!$tokens) continue;',
+      '  $sessions = $tokens->get_all();',
+      '  $primary_blog = (int) get_user_meta($user->ID, \'primary_blog\', true) ?: 1;',
+      '  foreach ($sessions as $s) {',
+      '    if (!empty($s[\'login\'])) {',
+      '      $bid = isset($s[\'blog_id\']) ? (int) $s[\'blog_id\'] : $primary_blog;',
+      '      $site = $site_map[$bid] ?? null;',
+      '      $results[] = [\'user\' => $user->display_name ?: $user->user_login, \'login\' => gmdate(\'c\', $s[\'login\']), \'site_url\' => $site ? $site[\'url\'] : null, \'site_name\' => $site ? $site[\'name\'] : null];',
+      '    }',
+      '  }',
+      '}',
+      'usort($results, function($a, $b) { return strcmp($b[\'login\'], $a[\'login\']); });',
+      'echo json_encode(array_slice($results, 0, 10));',
+    ].join(' ');
+    const phpCode = php.replace(/\n/g, ' ').trim().replace(/\$/g, '\\$').replace(/"/g, '\\"');
+    const { stdout, stderr, exitCode } = await wpCliExec(
+      ['eval', `"${phpCode}"`],
+      { format: false }
+    );
+    if (exitCode !== 0) {
+      return res.status(500).json({
+        success: false,
+        error: 'Erreur WP-CLI',
+        stderr: stderr || undefined,
+        exitCode,
+      });
+    }
+    let connexions = [];
+    try {
+      connexions = stdout ? JSON.parse(stdout) : [];
+    } catch {
+      connexions = [];
+    }
+    res.json({ success: true, count: connexions.length, connexions });
+  } catch (err) {
+    console.error('wp connexions error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération des connexions',
+      message: err.message,
+    });
+  }
+});
+
+/**
+ * GET /site-stats - Statistiques par type de contenu + espace disque
+ * ?url= optionnel : site ciblé ; absent = agrégat tout le multisite
+ */
+router.get('/site-stats', async (req, res) => {
+  try {
+    const url = req.query.url || null;
+
+    // 1. Post types avec comptage
+    let postTypes = [];
+    if (url) {
+      // Un seul site
+      const { stdout, exitCode } = await wpCliExec(
+        ['post-type', 'list', '--fields=name,label,count'],
+        { url, format: 'json' }
+      );
+      if (exitCode !== 0) {
+        return res.status(500).json({ success: false, error: 'Erreur post-type list' });
+      }
+      try {
+        postTypes = stdout ? JSON.parse(stdout) : [];
+      } catch {
+        postTypes = [];
+      }
+    } else {
+      // Agrégat multisite : récupérer sites, puis comptes par site
+      const sitesRes = await wpCliExec(['site', 'list'], { format: 'json' });
+      if (sitesRes.exitCode !== 0) {
+        return res.status(500).json({ success: false, error: 'Erreur liste des sites' });
+      }
+      let sites = [];
+      try {
+        sites = sitesRes.stdout ? JSON.parse(sitesRes.stdout) : [];
+      } catch {
+        sites = [];
+      }
+      const countsByName = {};
+      const labelsByName = {};
+      const concurrency = 3;
+      for (let i = 0; i < sites.length; i += concurrency) {
+        const batch = sites.slice(i, i + concurrency);
+        const batchRes = await Promise.all(
+          batch.map(async (site) => {
+            const { stdout, exitCode } = await wpCliExec(
+              ['post-type', 'list', '--fields=name,label,count'],
+              { url: site.url, format: 'json' }
+            );
+            if (exitCode !== 0) return [];
+            try {
+              return stdout ? JSON.parse(stdout) : [];
+            } catch {
+              return [];
+            }
+          })
+        );
+        for (const list of batchRes) {
+          for (const pt of list) {
+            const n = pt.name || pt.slug;
+            const c = parseInt(pt.count, 10) || 0;
+            countsByName[n] = (countsByName[n] || 0) + c;
+            if (pt.label) labelsByName[n] = pt.label;
+          }
+        }
+      }
+      postTypes = Object.entries(countsByName).map(([name, count]) => ({
+        name,
+        label: labelsByName[name] || name,
+        count: String(count),
+      }));
+    }
+
+    // Filtrer les types internes + ceux avec 0 élément
+    const skip = new Set(['revision', 'nav_menu_item', 'custom_css', 'customize_changeset', 'oembed_cache', 'user_request', 'wp_block', 'acf-field', 'acf-field-group']);
+    const contentTypes = postTypes
+      .filter((pt) => pt.name && !skip.has(pt.name) && (parseInt(pt.count, 10) || 0) >= 1)
+      .sort((a, b) => (a.label || a.name).localeCompare(b.label || b.name));
+
+    // 2. Espace disque
+    let diskUsed = null;
+    if (url) {
+      // Trouver blog_id pour le chemin uploads
+      const sitesRes = await wpCliExec(['site', 'list'], { format: 'json' });
+      let sites = [];
+      try {
+        sites = sitesRes.stdout ? JSON.parse(sitesRes.stdout) : [];
+      } catch {}
+      const site = sites.find((s) => s.url === url);
+      const blogId = site ? String(site.blog_id) : null;
+      let path;
+      if (blogId === '1') {
+        path = '/var/www/html/wp-content/uploads';
+      } else if (blogId) {
+        path = `/var/www/html/wp-content/uploads/sites/${blogId}`;
+      } else {
+        path = '/var/www/html/wp-content';
+      }
+      const duRes = await execInContainer(`du -sh ${path} 2>/dev/null`);
+      if (duRes.exitCode === 0 && duRes.stdout) {
+        diskUsed = duRes.stdout.split(/\s+/)[0] || null;
+      }
+    } else {
+      const duRes = await execInContainer('du -sh /var/www/html/wp-content 2>/dev/null');
+      if (duRes.exitCode === 0 && duRes.stdout) {
+        diskUsed = duRes.stdout.split(/\s+/)[0] || null;
+      }
+    }
+
+    res.json({
+      success: true,
+      content_types: contentTypes,
+      disk_used: diskUsed,
+    });
+  } catch (err) {
+    console.error('wp site-stats error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération des statistiques',
       message: err.message,
     });
   }
