@@ -3,17 +3,23 @@ services:
     build: .
     container_name: admin-api
     restart: unless-stopped
+    env_file:
+      - .env
     # Localhost uniquement - accessible depuis le VPS et les conteneurs sur web-network
+    # Port: HOST_PORT:CONTAINER_PORT (ex: 3009:3000)
     ports:
-      - "127.0.0.1:3009:3000"
+      - "${ADMIN_API_HOST:-127.0.0.1}:${ADMIN_API_HOST_PORT:-3009}:${ADMIN_API_PORT:-3000}"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     networks:
       - web-network
     environment:
       - NODE_ENV=production
-      - PORT=3000
-      - SCRIPTS_PATH=/home/graphandco/monitoring
+      - PORT=${ADMIN_API_PORT:-3000}
+      - SCRIPTS_PATH=${SCRIPTS_PATH:-/home/graphandco/monitoring}
+      - DOCKER_SOCKET_PATH=${DOCKER_SOCKET_PATH:-/var/run/docker.sock}
+      - SCRIPT_TIMEOUT_MS=${SCRIPT_TIMEOUT_MS:-60000}
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
     cpus: 0.5
     mem_limit: 256m
     security_opt:
