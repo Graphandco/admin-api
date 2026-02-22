@@ -1,0 +1,13 @@
+{
+  "name": "admin-api",
+  "version": "1.0.0",
+  "description": "API Gateway légère exécuter des commandes Docker et monitoring du VPS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "dockerode": "^4.0.2"
+  }
+}

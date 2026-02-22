@@ -1,0 +1,29 @@
+services:
+  admin-api:
+    build: .
+    container_name: admin-api
+    restart: unless-stopped
+    # Localhost uniquement - accessible depuis le VPS et les conteneurs sur web-network
+    ports:
+      - "127.0.0.1:3009:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - web-network
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - SCRIPTS_PATH=/home/graphandco/monitoring
+    cpus: 0.5
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  web-network:
+    external: true
