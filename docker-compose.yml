@@ -16,6 +16,10 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=${ADMIN_API_PORT:-3000}
+      - MYSQL_HOST=${MYSQL_HOST:-mysql}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
       - SCRIPTS_PATH=${SCRIPTS_PATH:-/home/graphandco/monitoring}
       - DOCKER_SOCKET_PATH=${DOCKER_SOCKET_PATH:-/var/run/docker.sock}
       - SCRIPT_TIMEOUT_MS=${SCRIPT_TIMEOUT_MS:-60000}

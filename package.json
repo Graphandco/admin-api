@@ -7,7 +7,9 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "dockerode": "^4.0.2",
+    "dotenv": "^17.3.1",
     "express": "^4.21.0",
-    "dockerode": "^4.0.2"
+    "mysql2": "^3.17.4"
   }
 }

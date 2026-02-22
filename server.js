@@ -1,6 +1,7 @@
 /**
  * Admin API - Gateway légère pour Docker, monitoring et WordPress
  */
+require('dotenv').config();
 
 const express = require('express');
 const { PORT, ADMIN_API_KEY } = require('./config');
@@ -8,6 +9,7 @@ const { PORT, ADMIN_API_KEY } = require('./config');
 const dockerRoutes = require('./routes/docker');
 const scriptsRoutes = require('./routes/scripts');
 const wordpressRoutes = require('./routes/wordpress');
+const clientsRoutes = require('./routes/clients');
 
 const app = express();
 
@@ -43,6 +45,7 @@ app.get('/health', (_, res) => {
 app.use('/api/docker', dockerRoutes);
 app.use('/api/scripts', scriptsRoutes);
 app.use('/api/wordpress', wordpressRoutes);
+app.use('/api/clients', clientsRoutes);
 
 // 404
 app.use((_, res) => {
