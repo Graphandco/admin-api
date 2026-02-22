@@ -70,6 +70,125 @@ router.get('/stats', async (req, res) => {
 });
 
 /**
+ * POST /container/:id/start - Démarrer un conteneur
+ */
+router.post('/container/:id/start', async (req, res) => {
+  try {
+    const container = docker.getContainer(req.params.id);
+    await container.start();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('docker start error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Erreur au démarrage du conteneur',
+    });
+  }
+});
+
+/**
+ * POST /container/:id/stop - Arrêter un conteneur
+ */
+router.post('/container/:id/stop', async (req, res) => {
+  try {
+    const container = docker.getContainer(req.params.id);
+    await container.stop();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('docker stop error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Erreur à l\'arrêt du conteneur',
+    });
+  }
+});
+
+/**
+ * POST /container/:id/remove - Supprimer un conteneur
+ */
+router.post('/container/:id/remove', async (req, res) => {
+  try {
+    const container = docker.getContainer(req.params.id);
+    await container.remove({ force: true });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('docker remove error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Erreur à la suppression du conteneur',
+    });
+  }
+});
+
+/**
+ * POST /container/:id/compose - Démarrer via docker compose up
+ */
+router.post('/container/:id/compose', async (req, res) => {
+  try {
+    const container = docker.getContainer(req.params.id);
+    const inspect = await container.inspect();
+    const labels = inspect.Config?.Labels || {};
+    const project = labels['com.docker.compose.project'];
+    const service = labels['com.docker.compose.service'];
+    const workingDir = labels['com.docker.compose.project.working_dir'];
+    const projectsRoot = process.env.COMPOSE_PROJECTS_ROOT || '/var/www/docker-stack';
+    const baseDir = workingDir || (project ? `${projectsRoot}/${project}` : null);
+    if (!project || !service || !baseDir) {
+      return res.status(400).json({
+        success: false,
+        error: 'Conteneur non géré par docker compose ou labels manquants',
+      });
+    }
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    const cmd = `cd ${baseDir} && docker compose -p ${project} up -d ${service}`;
+    await execAsync(cmd, { timeout: 60000, maxBuffer: 1024 * 1024 });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('docker compose up error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Erreur lors du démarrage compose',
+    });
+  }
+});
+
+/**
+ * POST /container/:id/build - Build (via docker compose)
+ */
+router.post('/container/:id/build', async (req, res) => {
+  try {
+    const container = docker.getContainer(req.params.id);
+    const inspect = await container.inspect();
+    const labels = inspect.Config?.Labels || {};
+    const project = labels['com.docker.compose.project'];
+    const service = labels['com.docker.compose.service'];
+    const workingDir = labels['com.docker.compose.project.working_dir'];
+    const projectsRoot = process.env.COMPOSE_PROJECTS_ROOT || '/var/www/docker-stack';
+    const baseDir = workingDir || (project ? `${projectsRoot}/${project}` : null);
+    if (!project || !service || !baseDir) {
+      return res.status(400).json({
+        success: false,
+        error: 'Conteneur non géré par docker compose ou labels manquants',
+      });
+    }
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    const cmd = `cd ${baseDir} && docker compose -p ${project} build ${service}`;
+    await execAsync(cmd, { timeout: 120000, maxBuffer: 1024 * 1024 });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('docker build error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Erreur lors du build',
+    });
+  }
+});
+
+/**
  * GET /logs?container=xxx - Logs d'un conteneur
  */
 router.get('/logs', async (req, res) => {
