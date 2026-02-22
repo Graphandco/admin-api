@@ -11,6 +11,22 @@ const FIELDS = [
   'payment_date', 'annual_cost', 'creation_cost', 'invoice',
 ];
 
+/** Limites de taille (caractères) pour les champs texte clients */
+const MAX_LENGTH = {
+  name: 200,
+  company: 200,
+  email: 255,
+  website: 500,
+  phone: 50,
+  adresse: 500,
+};
+
+function truncate(str, maxLen) {
+  if (str == null || typeof str !== 'string') return str;
+  if (str.length <= maxLen) return str;
+  return str.slice(0, maxLen);
+}
+
 function formatDateForApi(val) {
   if (!val) return null;
   if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) return val.slice(0, 10);
@@ -93,12 +109,12 @@ router.post('/', async (req, res) => {
       `INSERT INTO clients (name, company, email, website, phone, adresse, payment_date, annual_cost, creation_cost, invoice)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        body.name ?? '',
-        body.company ?? '',
-        body.email ?? '',
-        body.website ?? '',
-        body.phone ?? '',
-        body.adresse ?? '',
+        truncate(body.name ?? '', MAX_LENGTH.name),
+        truncate(body.company ?? '', MAX_LENGTH.company),
+        truncate(body.email ?? '', MAX_LENGTH.email),
+        truncate(body.website ?? '', MAX_LENGTH.website),
+        truncate(body.phone ?? '', MAX_LENGTH.phone),
+        truncate(body.adresse ?? '', MAX_LENGTH.adresse),
         body.payment_date || null,
         body.annual_cost != null ? Number(body.annual_cost) : null,
         body.creation_cost != null ? Number(body.creation_cost) : null,
@@ -132,12 +148,12 @@ router.put('/:id', async (req, res) => {
         payment_date = ?, annual_cost = ?, creation_cost = ?, invoice = ?
        WHERE id = ?`,
       [
-        body.name ?? '',
-        body.company ?? '',
-        body.email ?? '',
-        body.website ?? '',
-        body.phone ?? '',
-        body.adresse ?? '',
+        truncate(body.name ?? '', MAX_LENGTH.name),
+        truncate(body.company ?? '', MAX_LENGTH.company),
+        truncate(body.email ?? '', MAX_LENGTH.email),
+        truncate(body.website ?? '', MAX_LENGTH.website),
+        truncate(body.phone ?? '', MAX_LENGTH.phone),
+        truncate(body.adresse ?? '', MAX_LENGTH.adresse),
         body.payment_date || null,
         body.annual_cost != null ? Number(body.annual_cost) : null,
         body.creation_cost != null ? Number(body.creation_cost) : null,

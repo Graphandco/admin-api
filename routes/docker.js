@@ -36,9 +36,8 @@ router.get('/ps', async (req, res) => {
   }
 });
 
-/**
- * GET /stats - Stats des conteneurs (CPU, mémoire)
- */
+/*
+ * GET /stats - Stats des conteneurs (CPU, mémoire) - DÉSACTIVÉ (non utilisé)
 router.get('/stats', async (req, res) => {
   try {
     const containers = await docker.listContainers({ all: false });
@@ -68,6 +67,7 @@ router.get('/stats', async (req, res) => {
     });
   }
 });
+*/
 
 /**
  * POST /container/:id/start - Démarrer un conteneur
@@ -188,9 +188,8 @@ router.post('/container/:id/build', async (req, res) => {
   }
 });
 
-/**
- * GET /logs?container=xxx - Logs d'un conteneur
- */
+/*
+ * GET /logs?container=xxx - Logs d'un conteneur - DÉSACTIVÉ (vulnérable à l'injection, non utilisé)
 router.get('/logs', async (req, res) => {
   try {
     const containerId = req.query.container;
@@ -214,5 +213,6 @@ router.get('/logs', async (req, res) => {
     });
   }
 });
+*/
 
 module.exports = router;

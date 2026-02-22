@@ -4,6 +4,7 @@
 
 const express = require('express');
 const { wpCliExec, execInContainer } = require('../lib/wp-cli');
+const { validatePluginStatus, validateWpUrl } = require('../lib/validate');
 
 const router = express.Router();
 
@@ -91,12 +92,14 @@ router.get('/info', async (req, res) => {
 router.get('/site-info', async (req, res) => {
   try {
     const url = req.query.url;
-    if (!url) {
-      return res.status(400).json({ success: false, error: 'Paramètre url requis' });
+    const urlCheck = validateWpUrl(url);
+    if (!urlCheck.valid) {
+      return res.status(400).json({ success: false, error: urlCheck.error || 'Paramètre url requis' });
     }
+    const validatedUrl = url.trim();
     const [nameRes, taglineRes, sitesRes] = await Promise.all([
-      wpCliExec(['option', 'get', 'blogname'], { url, format: false }),
-      wpCliExec(['option', 'get', 'blogdescription'], { url, format: false }),
+      wpCliExec(['option', 'get', 'blogname'], { url: validatedUrl, format: false }),
+      wpCliExec(['option', 'get', 'blogdescription'], { url: validatedUrl, format: false }),
       wpCliExec(['site', 'list'], { format: 'json' }),
     ]);
     const site_name = nameRes.exitCode === 0 && nameRes.stdout ? nameRes.stdout.trim() : null;
@@ -104,13 +107,13 @@ router.get('/site-info', async (req, res) => {
     // Icône du site (Réglages > Général > Icône du site) - wp option get + wp post list
     let logo_url = null;
     try {
-      const iconRes = await wpCliExec(['option', 'get', 'site_icon'], { url, format: false });
+      const iconRes = await wpCliExec(['option', 'get', 'site_icon'], { url: validatedUrl, format: false });
       if (iconRes.exitCode === 0 && iconRes.stdout) {
         const attachmentId = iconRes.stdout.trim();
         if (attachmentId && attachmentId !== '0') {
           const postRes = await wpCliExec(
             ['post', 'list', '--post_type=attachment', '--post__in=' + attachmentId, '--field=url'],
-            { url, format: false }
+            { url: validatedUrl, format: false }
           );
           if (postRes.exitCode === 0 && postRes.stdout) {
             logo_url = postRes.stdout.trim() || null;
@@ -124,9 +127,9 @@ router.get('/site-info', async (req, res) => {
       success: true,
       site_name,
       tagline: tagline || null,
-      url,
+      url: validatedUrl,
       logo_url,
-      admin_url: url.replace(/\/?$/, '') + '/wp-admin',
+      admin_url: validatedUrl.replace(/\/?$/, '') + '/wp-admin',
     });
   } catch (err) {
     console.error('wp site-info error:', err.message);
@@ -143,12 +146,22 @@ router.get('/site-info', async (req, res) => {
  */
 router.get('/plugins', async (req, res) => {
   try {
-    const url = req.query.url; // ex: https://sites.graphandco.net/site1/
-    const status = req.query.status; // ex: active (pour filtrer par site)
+    const url = req.query.url;
+    const status = req.query.status;
+    const statusCheck = validatePluginStatus(status);
+    if (!statusCheck.valid) {
+      return res.status(400).json({ success: false, error: statusCheck.error });
+    }
+    if (url) {
+      const urlCheck = validateWpUrl(url);
+      if (!urlCheck.valid) {
+        return res.status(400).json({ success: false, error: urlCheck.error });
+      }
+    }
     const args = ['plugin', 'list', '--fields=name,title,status,version,update,update_version'];
-    if (status) args.push(`--status=${status}`);
+    if (status) args.push(`--status=${status.trim()}`);
     const { stdout, stderr, exitCode } = await wpCliExec(args, {
-      url: url || undefined,
+      url: url ? url.trim() : undefined,
     });
     if (exitCode !== 0) {
       const errMsg = (stderr && stderr.trim()) || 'Erreur WP-CLI';
@@ -340,7 +353,14 @@ router.get('/connexions', async (req, res) => {
  */
 router.get('/site-stats', async (req, res) => {
   try {
-    const url = req.query.url || null;
+    const urlParam = req.query.url || null;
+    if (urlParam) {
+      const urlCheck = validateWpUrl(urlParam);
+      if (!urlCheck.valid) {
+        return res.status(400).json({ success: false, error: urlCheck.error });
+      }
+    }
+    const url = urlParam ? urlParam.trim() : null;
 
     // 1. Post types avec comptage
     let postTypes = [];

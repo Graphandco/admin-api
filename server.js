@@ -4,6 +4,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { PORT, ADMIN_API_KEY } = require('./config');
 
 const dockerRoutes = require('./routes/docker');
@@ -12,6 +13,15 @@ const wordpressRoutes = require('./routes/wordpress');
 const clientsRoutes = require('./routes/clients');
 
 const app = express();
+
+// Rate limiting: 100 requêtes/minute par IP sur /api
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: 'Trop de requêtes, réessayez plus tard' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Middleware
 app.use(express.json());
@@ -33,8 +43,8 @@ function requireApiKey(req, res, next) {
   next();
 }
 
-// Protéger toutes les routes /api/* (sauf /health)
-app.use('/api', requireApiKey);
+// Rate limiting + auth sur /api
+app.use('/api', apiLimiter, requireApiKey);
 
 // Santé de l'API (accessible sans clé pour healthchecks)
 app.get('/health', (_, res) => {
