@@ -11,6 +11,17 @@ const FIELDS = [
   'payment_date', 'annual_cost', 'creation_cost', 'invoice',
 ];
 
+function formatDateForApi(val) {
+  if (!val) return null;
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) return val.slice(0, 10);
+  const d = val instanceof Date ? val : new Date(val);
+  if (isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function rowToClient(row) {
   if (!row) return null;
   return {
@@ -21,7 +32,7 @@ function rowToClient(row) {
     website: row.website ?? '',
     phone: row.phone ?? '',
     adresse: row.adresse ?? '',
-    payment_date: row.payment_date ? String(row.payment_date).slice(0, 10) : null,
+    payment_date: formatDateForApi(row.payment_date),
     annual_cost: row.annual_cost != null ? Number(row.annual_cost) : null,
     creation_cost: row.creation_cost != null ? Number(row.creation_cost) : null,
     invoice: Boolean(row.invoice),
