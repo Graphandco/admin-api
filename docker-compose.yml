@@ -20,6 +20,7 @@ services:
       - DOCKER_SOCKET_PATH=${DOCKER_SOCKET_PATH:-/var/run/docker.sock}
       - SCRIPT_TIMEOUT_MS=${SCRIPT_TIMEOUT_MS:-60000}
       - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - WP_CLI_CONTAINER=${WP_CLI_CONTAINER:-wordpress-wpcli}
     cpus: 0.5
     mem_limit: 256m
     security_opt:
