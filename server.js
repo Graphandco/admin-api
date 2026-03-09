@@ -12,6 +12,7 @@ const scriptsRoutes = require('./routes/scripts');
 const wordpressRoutes = require('./routes/wordpress');
 const clientsRoutes = require('./routes/clients');
 const invoicesRoutes = require('./routes/invoices');
+const contractsRoutes = require('./routes/contracts');
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use('/api/scripts', scriptsRoutes);
 app.use('/api/wordpress', wordpressRoutes);
 app.use('/api/clients', clientsRoutes);
 app.use('/api/invoices', invoicesRoutes);
+app.use('/api/contracts', contractsRoutes);
 
 // 404
 app.use((_, res) => {
