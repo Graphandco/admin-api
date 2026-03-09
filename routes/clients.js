@@ -8,6 +8,7 @@ const router = express.Router();
 
 const FIELDS = [
   'name', 'company', 'email', 'website', 'phone', 'adresse',
+  'post_code', 'city',
   'payment_date', 'annual_cost', 'creation_cost', 'invoice',
 ];
 
@@ -19,6 +20,8 @@ const MAX_LENGTH = {
   website: 500,
   phone: 50,
   adresse: 500,
+  post_code: 20,
+  city: 255,
 };
 
 function truncate(str, maxLen) {
@@ -48,6 +51,8 @@ function rowToClient(row) {
     website: row.website ?? '',
     phone: row.phone ?? '',
     adresse: row.adresse ?? '',
+    post_code: row.post_code ?? '',
+    city: row.city ?? '',
     payment_date: formatDateForApi(row.payment_date),
     annual_cost: row.annual_cost != null ? Number(row.annual_cost) : null,
     creation_cost: row.creation_cost != null ? Number(row.creation_cost) : null,
@@ -56,15 +61,28 @@ function rowToClient(row) {
 }
 
 /**
- * GET /clients - Liste tous les clients
+ * GET /clients - Liste tous les clients avec leurs sites (non backoffice)
  */
 router.get('/', async (req, res) => {
   try {
     const pool = getPool();
     const [rows] = await pool.query(
-      'SELECT id, name, company, email, website, phone, adresse, payment_date, annual_cost, creation_cost, invoice FROM clients ORDER BY name ASC'
+      'SELECT id, name, company, email, website, phone, adresse, post_code, city, payment_date, annual_cost, creation_cost, invoice FROM clients ORDER BY name ASC'
     );
-    res.json({ success: true, clients: rows.map(rowToClient) });
+    const [webRows] = await pool.query(
+      'SELECT client_id, address FROM websites ORDER BY address ASC'
+    );
+    const websitesByClient = {};
+    for (const w of webRows) {
+      if (!websitesByClient[w.client_id]) websitesByClient[w.client_id] = [];
+      websitesByClient[w.client_id].push(w.address ?? '');
+    }
+    const clients = rows.map((r) => {
+      const client = rowToClient(r);
+      client.websites = websitesByClient[r.id] || [];
+      return client;
+    });
+    res.json({ success: true, clients });
   } catch (err) {
     console.error('clients list error:', err.message);
     res.status(500).json({
@@ -81,7 +99,7 @@ router.get('/:id', async (req, res) => {
   try {
     const pool = getPool();
     const [rows] = await pool.query(
-      'SELECT id, name, company, email, website, phone, adresse, payment_date, annual_cost, creation_cost, invoice FROM clients WHERE id = ?',
+      'SELECT id, name, company, email, website, phone, adresse, post_code, city, payment_date, annual_cost, creation_cost, invoice FROM clients WHERE id = ?',
       [req.params.id]
     );
     const client = rows[0] ? rowToClient(rows[0]) : null;
@@ -106,8 +124,8 @@ router.post('/', async (req, res) => {
     const body = req.body || {};
     const pool = getPool();
     const [result] = await pool.query(
-      `INSERT INTO clients (name, company, email, website, phone, adresse, payment_date, annual_cost, creation_cost, invoice)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO clients (name, company, email, website, phone, adresse, post_code, city, payment_date, annual_cost, creation_cost, invoice)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         truncate(body.name ?? '', MAX_LENGTH.name),
         truncate(body.company ?? '', MAX_LENGTH.company),
@@ -115,6 +133,8 @@ router.post('/', async (req, res) => {
         truncate(body.website ?? '', MAX_LENGTH.website),
         truncate(body.phone ?? '', MAX_LENGTH.phone),
         truncate(body.adresse ?? '', MAX_LENGTH.adresse),
+        truncate(body.post_code ?? '', MAX_LENGTH.post_code),
+        truncate(body.city ?? '', MAX_LENGTH.city),
         body.payment_date || null,
         body.annual_cost != null ? Number(body.annual_cost) : null,
         body.creation_cost != null ? Number(body.creation_cost) : null,
@@ -122,7 +142,7 @@ router.post('/', async (req, res) => {
       ]
     );
     const [rows] = await pool.query(
-      'SELECT id, name, company, email, website, phone, adresse, payment_date, annual_cost, creation_cost, invoice FROM clients WHERE id = ?',
+      'SELECT id, name, company, email, website, phone, adresse, post_code, city, payment_date, annual_cost, creation_cost, invoice FROM clients WHERE id = ?',
       [result.insertId]
     );
     res.status(201).json({ success: true, client: rowToClient(rows[0]) });
@@ -145,6 +165,7 @@ router.put('/:id', async (req, res) => {
     const [result] = await pool.query(
       `UPDATE clients SET
         name = ?, company = ?, email = ?, website = ?, phone = ?, adresse = ?,
+        post_code = ?, city = ?,
         payment_date = ?, annual_cost = ?, creation_cost = ?, invoice = ?
        WHERE id = ?`,
       [
@@ -154,6 +175,8 @@ router.put('/:id', async (req, res) => {
         truncate(body.website ?? '', MAX_LENGTH.website),
         truncate(body.phone ?? '', MAX_LENGTH.phone),
         truncate(body.adresse ?? '', MAX_LENGTH.adresse),
+        truncate(body.post_code ?? '', MAX_LENGTH.post_code),
+        truncate(body.city ?? '', MAX_LENGTH.city),
         body.payment_date || null,
         body.annual_cost != null ? Number(body.annual_cost) : null,
         body.creation_cost != null ? Number(body.creation_cost) : null,
@@ -165,7 +188,7 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Client introuvable' });
     }
     const [rows] = await pool.query(
-      'SELECT id, name, company, email, website, phone, adresse, payment_date, annual_cost, creation_cost, invoice FROM clients WHERE id = ?',
+      'SELECT id, name, company, email, website, phone, adresse, post_code, city, payment_date, annual_cost, creation_cost, invoice FROM clients WHERE id = ?',
       [req.params.id]
     );
     res.json({ success: true, client: rowToClient(rows[0]) });
