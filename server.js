@@ -11,6 +11,7 @@ const dockerRoutes = require('./routes/docker');
 const scriptsRoutes = require('./routes/scripts');
 const wordpressRoutes = require('./routes/wordpress');
 const clientsRoutes = require('./routes/clients');
+const invoicesRoutes = require('./routes/invoices');
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use('/api/docker', dockerRoutes);
 app.use('/api/scripts', scriptsRoutes);
 app.use('/api/wordpress', wordpressRoutes);
 app.use('/api/clients', clientsRoutes);
+app.use('/api/invoices', invoicesRoutes);
 
 // 404
 app.use((_, res) => {
