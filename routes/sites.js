@@ -43,6 +43,47 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * POST /sites - Créer un site
+ */
+router.post('/', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const clientId = body.client_id != null ? parseInt(body.client_id, 10) : null;
+    if (!clientId || isNaN(clientId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'client_id invalide ou manquant',
+      });
+    }
+    const pool = getPool();
+    const [result] = await pool.query(
+      `INSERT INTO websites (client_id, address, backoffice)
+       VALUES (?, ?, ?)`,
+      [
+        clientId,
+        String(body.address ?? '').trim().slice(0, 500),
+        String(body.backoffice ?? '').trim().slice(0, 500),
+      ]
+    );
+    const [rows] = await pool.query(
+      `SELECT w.id, w.client_id, w.address, w.backoffice,
+              c.company AS client_company, c.name AS client_name
+       FROM websites w
+       LEFT JOIN clients c ON c.id = w.client_id
+       WHERE w.id = ?`,
+      [result.insertId]
+    );
+    res.status(201).json({ success: true, site: rowToSite(rows[0]) });
+  } catch (err) {
+    console.error('sites create error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Erreur lors de la création du site',
+    });
+  }
+});
+
+/**
  * PUT /sites/:id - Modifier un site
  */
 router.put('/:id', async (req, res) => {

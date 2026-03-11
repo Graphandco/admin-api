@@ -36,38 +36,92 @@ router.get('/ps', async (req, res) => {
   }
 });
 
-/*
- * GET /stats - Stats des conteneurs (CPU, mémoire) - DÉSACTIVÉ (non utilisé)
+/**
+ * GET /stats - Stats RAM de tous les conteneurs running (pour le graphique)
+ */
 router.get('/stats', async (req, res) => {
   try {
     const containers = await docker.listContainers({ all: false });
-    const statsPromises = containers.map(async (c) => {
-      try {
-        const container = docker.getContainer(c.Id);
-        const stats = await new Promise((resolve, reject) => {
-          container.stats({ stream: false }, (err, data) => {
-            if (err) return reject(err);
-            resolve(data);
+    const results = await Promise.all(
+      containers.map(async (c) => {
+        try {
+          const container = docker.getContainer(c.Id);
+          const stats = await new Promise((resolve, reject) => {
+            container.stats({ stream: false }, (err, data) => {
+              if (err) return reject(err);
+              resolve(data);
+            });
           });
-        });
-        const name = c.Names?.[0]?.replace(/^\//, '') || c.Id.slice(0, 12);
-        return { id: c.Id, name, ...stats };
-      } catch {
-        return null;
-      }
-    });
-    const statsList = (await Promise.all(statsPromises)).filter(Boolean);
+          const memUsage = stats.memory_stats?.usage ?? 0;
+          const memLimit = stats.memory_stats?.limit || stats.memory_stats?.max_usage || 1;
+          const memPercent = memLimit > 0 ? Math.round((memUsage / memLimit) * 100) : 0;
+          const name = c.Names?.[0]?.replace(/^\//, '') || c.Id.slice(0, 12);
+          return { id: c.Id, name, memory: { used: memUsage, total: memLimit, percent: memPercent } };
+        } catch {
+          return null;
+        }
+      })
+    );
+    const statsList = results.filter(Boolean);
     res.json({ success: true, stats: statsList });
   } catch (err) {
-    console.error('docker stats error:', err.message);
+    console.error('docker stats all error:', err.message);
+    res.status(500).json({ success: false, error: err.message || 'Erreur lors de la récupération des stats' });
+  }
+});
+
+/**
+ * GET /stats/:id - Stats d'un conteneur (CPU, RAM, uptime)
+ */
+router.get('/stats/:id', async (req, res) => {
+  try {
+    const container = docker.getContainer(req.params.id);
+    const stats = await new Promise((resolve, reject) => {
+      container.stats({ stream: false }, (err, data) => {
+        if (err) return reject(err);
+        resolve(data);
+      });
+    });
+    const memUsage = stats.memory_stats?.usage ?? 0;
+    const memLimit = stats.memory_stats?.limit || stats.memory_stats?.max_usage || 1;
+    const memPercent = memLimit > 0 ? Math.round((memUsage / memLimit) * 100) : 0;
+
+    const cpuStats = stats.cpu_stats || {};
+    const precpuStats = stats.precpu_stats || {};
+    const cpuUsage = cpuStats.cpu_usage?.total_usage ?? 0;
+    const precpuUsage = precpuStats.cpu_usage?.total_usage ?? 0;
+    const systemUsage = cpuStats.system_cpu_usage ?? 0;
+    const presystemUsage = precpuStats.system_cpu_usage ?? 0;
+    const cpuDelta = Math.max(0, cpuUsage - precpuUsage);
+    const systemDelta = Math.max(1, systemUsage - presystemUsage);
+    const numCpus = (cpuStats.online_cpus ?? (cpuStats.cpu_usage?.percpu_usage?.length || 1));
+    const cpuPercent = Math.min(100, Math.round((cpuDelta / systemDelta) * 100 * numCpus));
+
+    let uptime = null;
+    try {
+      const inspect = await container.inspect();
+      const startedAt = inspect.State?.StartedAt;
+      if (startedAt && inspect.State?.Running) {
+        uptime = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+      }
+    } catch {}
+
+    res.json({
+      success: true,
+      stats: {
+        memory: { used: memUsage, total: memLimit, percent: memPercent },
+        cpu: { percent: cpuPercent },
+        uptime,
+      },
+    });
+  } catch (err) {
+    console.error('docker container stats error:', err.message);
     res.status(500).json({
       success: false,
-      error: 'Erreur lors de la récupération des stats',
-      message: err.message,
+      error: err.message || 'Erreur lors de la récupération des stats',
     });
   }
 });
-*/
 
 /**
  * POST /container/:id/start - Démarrer un conteneur
@@ -188,31 +242,61 @@ router.post('/container/:id/build', async (req, res) => {
   }
 });
 
-/*
- * GET /logs?container=xxx - Logs d'un conteneur - DÉSACTIVÉ (vulnérable à l'injection, non utilisé)
+/**
+ * Démultiplexe le flux de logs Docker (format 8-byte header + payload)
+ */
+function demuxDockerLogs(buffer) {
+  const result = [];
+  let offset = 0;
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  while (offset < buf.length) {
+    if (offset + 8 > buf.length) break;
+    const streamType = buf[offset];
+    const length = buf.readUInt32BE(offset + 4);
+    offset += 8;
+    if (offset + length > buf.length) break;
+    const chunk = buf.slice(offset, offset + length);
+    offset += length;
+    result.push(chunk.toString('utf8'));
+  }
+  return result.join('');
+}
+
+/**
+ * GET /logs?container=xxx&tail=100 - Logs d'un conteneur (Dockerode)
+ */
 router.get('/logs', async (req, res) => {
   try {
-    const containerId = req.query.container;
+    const containerId = (req.query.container || '').trim();
+    const tail = Math.min(500, Math.max(1, parseInt(req.query.tail, 10) || 100));
     if (!containerId) {
       return res.status(400).json({ success: false, error: 'Paramètre container requis' });
     }
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const execAsync = promisify(exec);
-    const { stdout } = await execAsync(`docker logs --tail 200 ${containerId} 2>&1`, {
-      timeout: 10000,
-      maxBuffer: 512 * 1024,
+    const container = docker.getContainer(containerId);
+    const rawLogs = await new Promise((resolve, reject) => {
+      container.logs(
+        { follow: false, tail, stdout: true, stderr: true },
+        (err, data) => {
+          if (err) return reject(err);
+          if (Buffer.isBuffer(data)) {
+            return resolve(data);
+          }
+          const chunks = [];
+          data.on('data', (chunk) => chunks.push(chunk));
+          data.on('end', () => resolve(Buffer.concat(chunks)));
+          data.on('error', reject);
+        }
+      );
     });
-    res.json({ success: true, logs: stdout || '' });
+    const logs = demuxDockerLogs(rawLogs);
+    res.json({ success: true, logs: logs || '' });
   } catch (err) {
     console.error('docker logs error:', err.message);
     res.status(500).json({
       success: false,
-      error: 'Erreur lors de la récupération des logs',
-      message: err.message,
+      error: err.message || 'Erreur lors de la récupération des logs',
     });
   }
 });
-*/
 
 module.exports = router;

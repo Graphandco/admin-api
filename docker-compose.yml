@@ -11,6 +11,9 @@ services:
       - "${ADMIN_API_HOST:-127.0.0.1}:${ADMIN_API_HOST_PORT:-3009}:${ADMIN_API_PORT:-3000}"
     volumes:
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+      # Stats VPS : accès aux métriques du HÔTE (pas du conteneur)
+      - /proc:/hostproc:ro
+      - /:/hostfs:ro
     networks:
       - web-network
     environment:
