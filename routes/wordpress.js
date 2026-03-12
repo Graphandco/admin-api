@@ -195,6 +195,48 @@ router.get('/plugins', async (req, res) => {
 });
 
 /**
+ * POST /plugins/update - Mise à jour d'un plugin (wp plugin update <slug>)
+ * Body: { plugin: string, url?: string }
+ */
+router.post('/plugins/update', async (req, res) => {
+  try {
+    const plugin = typeof req.body?.plugin === 'string' ? req.body.plugin.trim() : null;
+    if (!plugin || !/^[a-z0-9\-_]+$/i.test(plugin)) {
+      return res.status(400).json({ success: false, error: 'Paramètre plugin invalide (slug requis)' });
+    }
+    const url = req.body?.url && typeof req.body.url === 'string' ? req.body.url.trim() : null;
+    if (url) {
+      const urlCheck = validateWpUrl(url);
+      if (!urlCheck.valid) {
+        return res.status(400).json({ success: false, error: urlCheck.error });
+      }
+    }
+    const args = ['plugin', 'update', plugin];
+    const { stdout, stderr, exitCode } = await wpCliExec(args, {
+      url: url || undefined,
+      format: false,
+    });
+    if (exitCode !== 0) {
+      const errMsg = (stderr && stderr.trim()) || 'Erreur WP-CLI';
+      console.error('wp plugin update failed', { plugin, url, exitCode, stderr: stderr?.slice(0, 500) });
+      return res.status(500).json({
+        success: false,
+        error: errMsg,
+        stderr: stderr || undefined,
+        exitCode,
+      });
+    }
+    res.json({ success: true, message: `Plugin ${plugin} mis à jour`, stdout: stdout || undefined });
+  } catch (err) {
+    console.error('wp plugin update error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Erreur lors de la mise à jour du plugin',
+    });
+  }
+});
+
+/**
  * GET /recent-changes - 5 dernières modifications (posts/pages) sur tout le multisite
  */
 router.get('/recent-changes', async (req, res) => {

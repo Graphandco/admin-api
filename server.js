@@ -15,6 +15,7 @@ const invoicesRoutes = require('./routes/invoices');
 const contractsRoutes = require('./routes/contracts');
 const sitesRoutes = require('./routes/sites');
 const systemRoutes = require('./routes/system');
+const backupsRoutes = require('./routes/backups');
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api/invoices', invoicesRoutes);
 app.use('/api/contracts', contractsRoutes);
 app.use('/api/sites', sitesRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/backups', backupsRoutes);
 
 // 404
 app.use((_, res) => {

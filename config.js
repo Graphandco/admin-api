@@ -13,4 +13,8 @@ module.exports = {
   MYSQL_PASSWORD: process.env.MYSQL_PASSWORD || '',
   MYSQL_DATABASE: process.env.MYSQL_DATABASE || '',
   METRICS_TIMEZONE: process.env.METRICS_TIMEZONE || 'Europe/Paris',
+  RESTIC_REPOSITORY: (process.env.RESTIC_REPOSITORY || '').trim().replace(/^["']|["']$/g, ''),
+  RESTIC_PASSWORD: (process.env.RESTIC_PASSWORD || '').trim(),
+  RESTIC_PASSWORD_FILE: process.env.RESTIC_PASSWORD_FILE || '', // Chemin sur l'hôte (prioritaire si défini)
+  RESTIC_SSH_DIR: process.env.RESTIC_SSH_DIR || '/home/graphandco/.ssh',
 };

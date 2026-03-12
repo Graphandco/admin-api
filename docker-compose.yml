@@ -28,6 +28,8 @@ services:
       - SCRIPT_TIMEOUT_MS=${SCRIPT_TIMEOUT_MS:-60000}
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - WP_CLI_CONTAINER=${WP_CLI_CONTAINER:-wordpress-wpcli}
+      - RESTIC_REPOSITORY=${RESTIC_REPOSITORY:-}
+      - RESTIC_PASSWORD=${RESTIC_PASSWORD:-}
     cpus: 0.5
     mem_limit: 256m
     security_opt:
