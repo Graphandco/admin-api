@@ -7,6 +7,7 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const path = require('path');
 const { getPool } = require('../lib/db');
+const { METRICS_TIMEZONE } = require('../config');
 
 const router = express.Router();
 
@@ -169,20 +170,23 @@ router.get('/stats/history', async (req, res) => {
     if (!match) {
       return res.status(400).json({ success: false, error: 'Format date invalide (YYYY-MM-DD)' });
     }
-    const date = new Date(dateStr + 'T12:00:00Z');
     const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    if (date < sevenDaysAgo || date > now) {
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().slice(0, 10);
+    if (dateStr < sevenDaysAgoStr || dateStr > todayStr) {
       return res.status(400).json({ success: false, error: 'Date hors de la plage (7 derniers jours)' });
     }
 
+    // ts est stocké en UTC. On filtre par jour en Europe/Paris via CONVERT_TZ.
     const [rows] = await pool.execute(
       `SELECT ts, cpu_percent, mem_used, mem_total, disk_used, disk_total
        FROM ${VPS_METRICS_TABLE}
-       WHERE ts >= ? AND ts < DATE_ADD(?, INTERVAL 1 DAY)
+       WHERE ts >= CONVERT_TZ(CONCAT(?, ' 00:00:00'), ?, 'UTC')
+         AND ts < CONVERT_TZ(CONCAT(DATE_ADD(?, INTERVAL 1 DAY), ' 00:00:00'), ?, 'UTC')
        ORDER BY ts ASC`,
-      [dateStr, dateStr]
+      [dateStr, METRICS_TIMEZONE, dateStr, METRICS_TIMEZONE]
     );
 
     const data = rows.map((r) => ({

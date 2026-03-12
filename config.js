@@ -12,4 +12,5 @@ module.exports = {
   MYSQL_USER: process.env.MYSQL_USER || 'root',
   MYSQL_PASSWORD: process.env.MYSQL_PASSWORD || '',
   MYSQL_DATABASE: process.env.MYSQL_DATABASE || '',
+  METRICS_TIMEZONE: process.env.METRICS_TIMEZONE || 'Europe/Paris',
 };
