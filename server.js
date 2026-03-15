@@ -16,6 +16,7 @@ const contractsRoutes = require('./routes/contracts');
 const sitesRoutes = require('./routes/sites');
 const systemRoutes = require('./routes/system');
 const backupsRoutes = require('./routes/backups');
+const nasRoutes = require('./routes/nas');
 
 const app = express();
 
@@ -66,6 +67,7 @@ app.use('/api/contracts', contractsRoutes);
 app.use('/api/sites', sitesRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/backups', backupsRoutes);
+app.use('/api/nas', nasRoutes);
 
 // 404
 app.use((_, res) => {
