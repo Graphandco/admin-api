@@ -17,6 +17,8 @@ module.exports = {
   RESTIC_PASSWORD: (process.env.RESTIC_PASSWORD || '').trim(),
   RESTIC_PASSWORD_FILE: process.env.RESTIC_PASSWORD_FILE || '', // Chemin sur l'hôte (prioritaire si défini)
   RESTIC_SSH_DIR: process.env.RESTIC_SSH_DIR || '/home/graphandco/.ssh',
-  NAS_IP: (process.env.NAS_IP || '').trim(),
-  NAS_SSH_USER: (process.env.NAS_SSH_USER || 'root').trim(),
+  NAS_UNRAID_IP: (process.env.NAS_UNRAID_IP || '').trim(),
+  NAS_UNRAID_SSH_USER: (process.env.NAS_UNRAID_SSH_USER || 'root').trim(),
+  NAS_SYNOLOGY_IP: (process.env.NAS_SYNOLOGY_IP || '').trim(),
+  NAS_SYNOLOGY_SSH_USER: (process.env.NAS_SYNOLOGY_SSH_USER || 'root').trim(),
 };

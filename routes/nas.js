@@ -1,11 +1,18 @@
 /**
- * Routes monitoring NAS Unraid (RAM, CPU, uptime via SSH)
- * Utilise RESTIC_SSH_DIR pour les clés SSH, NAS_IP et NAS_SSH_USER du .env.
+ * Routes monitoring NAS Unraid & Synology (RAM, CPU, uptime via SSH)
+ * Utilise RESTIC_SSH_DIR pour les clés SSH.
+ * NAS_UNRAID_IP / NAS_SYNOLOGY_IP et NAS_UNRAID_SSH_USER / NAS_SYNOLOGY_SSH_USER dans .env.
  * Exécute SSH dans un conteneur Alpine avec --network host (Tailscale).
  */
 const express = require('express');
 const { spawn } = require('child_process');
-const { NAS_IP, NAS_SSH_USER, RESTIC_SSH_DIR } = require('../config');
+const {
+  NAS_UNRAID_IP,
+  NAS_UNRAID_SSH_USER,
+  NAS_SYNOLOGY_IP,
+  NAS_SYNOLOGY_SSH_USER,
+  RESTIC_SSH_DIR,
+} = require('../config');
 
 const router = express.Router();
 
@@ -35,11 +42,10 @@ function runSshCmd(sshDir, user, host, cmd) {
 }
 
 function parseFree(stdout) {
-  // free -m : Mem: total used free shared buff/cache available
   const line = stdout.split('\n').find((l) => l.startsWith('Mem:'));
   if (!line) return { total: 0, used: 0, available: 0, percent: 0 };
   const parts = line.split(/\s+/).filter(Boolean);
-  const total = parseInt(parts[1], 10) * 1024 * 1024; // MB -> bytes
+  const total = parseInt(parts[1], 10) * 1024 * 1024;
   const used = parseInt(parts[2], 10) * 1024 * 1024;
   const available = parseInt(parts[6], 10) * 1024 * 1024;
   const percent = total > 0 ? Math.round((used / total) * 100) : 0;
@@ -47,7 +53,6 @@ function parseFree(stdout) {
 }
 
 function parseLoadavg(stdout) {
-  // loadavg: 1.2 1.1 1.0 1/123 45678
   const parts = stdout.trim().split(/\s+/);
   return {
     load1: parseFloat(parts[0]) || 0,
@@ -57,29 +62,31 @@ function parseLoadavg(stdout) {
 }
 
 function parseUptime(stdout) {
-  // proc/uptime: 12345.67 12340.00
   const match = stdout.trim().match(/^(\d+(?:\.\d+)?)/);
   return match ? Math.floor(parseFloat(match[1])) : 0;
 }
 
-/**
- * GET /stats - RAM, CPU (loadavg), uptime du NAS Unraid
- */
-router.get('/stats', async (req, res) => {
+function formatBytes(bytes) {
+  if (!bytes || bytes < 1024) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+async function fetchNasStats(ip, user, sshDir, name) {
+  if (!ip) {
+    return {
+      configured: false,
+      message: `${name}: NAS_${name.toUpperCase().replace(/-/g, '_')}_IP non configuré dans .env`,
+    };
+  }
+
+  const sshUser = user || 'root';
+
   try {
-    if (!NAS_IP) {
-      return res.json({
-        success: true,
-        configured: false,
-        message: 'NAS_IP non configuré dans .env (ex: 100.84.122.48)',
-      });
-    }
-
-    const sshDir = RESTIC_SSH_DIR || '/home/graphandco/.ssh';
-    const user = NAS_SSH_USER || 'root';
-
     const cmd = "free -m | head -2; echo '---LOAD---'; cat /proc/loadavg; echo '---UPTIME---'; cat /proc/uptime";
-    const { stdout } = await runSshCmd(sshDir, user, NAS_IP, cmd);
+    const { stdout } = await runSshCmd(sshDir, sshUser, ip, cmd);
 
     const [memBlock, rest] = stdout.split('---LOAD---').map((s) => s.trim());
     const [loadPart, uptimePart] = (rest || '').split('---UPTIME---').map((s) => s.trim());
@@ -88,18 +95,9 @@ router.get('/stats', async (req, res) => {
     const loadavg = parseLoadavg(loadPart || '');
     const uptimeSeconds = parseUptime(uptimePart || '0');
 
-    const formatBytes = (bytes) => {
-      if (!bytes || bytes < 1024) return '0 B';
-      const k = 1024;
-      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-    };
-
-    res.json({
-      success: true,
+    return {
       configured: true,
-      host: NAS_IP,
+      host: ip,
       stats: {
         uptime: uptimeSeconds,
         memory: {
@@ -116,7 +114,7 @@ router.get('/stats', async (req, res) => {
           load15: loadavg.load15,
         },
       },
-    });
+    };
   } catch (err) {
     const stderr = err.stderr || err.message || '';
     const combined = [err.message, stderr].filter(Boolean).join('\n');
@@ -124,15 +122,41 @@ router.get('/stats', async (req, res) => {
     const isAuth = /permission denied|publickey|authentication failed/i.test(combined);
     const isNetwork = /connection refused|no route|timeout|network|unreachable|econnrefused/i.test(combined);
 
-    let message = 'Erreur lors de la récupération des stats NAS';
-    if (isAuth) message = 'SSH : clé refusée (vérifiez authorized_keys sur le NAS)';
-    else if (isNetwork) message = 'Impossible de joindre le NAS (Tailscale ? NAS_IP ?)';
+    let errorMessage = 'Erreur lors de la récupération des stats';
+    if (isAuth) errorMessage = 'SSH : clé refusée (vérifiez authorized_keys sur le NAS)';
+    else if (isNetwork) errorMessage = 'Impossible de joindre le NAS (Tailscale ? IP ?)';
 
-    console.error('nas stats error:', err.message, '\nstderr:', (stderr || '').slice(0, 500));
+    console.error(`nas stats ${name} error:`, err.message, '\nstderr:', (stderr || '').slice(0, 500));
+    return {
+      configured: true,
+      host: ip,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * GET /stats - RAM, CPU (loadavg), uptime pour Unraid et Synology
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    const sshDir = RESTIC_SSH_DIR || '/home/graphandco/.ssh';
+
+    const [unraid, synology] = await Promise.all([
+      fetchNasStats(NAS_UNRAID_IP, NAS_UNRAID_SSH_USER, sshDir, 'unraid'),
+      fetchNasStats(NAS_SYNOLOGY_IP, NAS_SYNOLOGY_SSH_USER, sshDir, 'synology'),
+    ]);
+
+    res.json({
+      success: true,
+      unraid,
+      synology,
+    });
+  } catch (err) {
+    console.error('nas stats error:', err.message);
     res.status(500).json({
       success: false,
-      error: message,
-      stderr: (stderr || '').slice(0, 500),
+      error: err.message || 'Erreur lors de la récupération des stats NAS',
     });
   }
 });
