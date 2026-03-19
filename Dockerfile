@@ -9,6 +9,7 @@ COPY package.json ./
 RUN npm install --omit=dev && npm cache clean --force
 
 COPY config.js server.js ./
+COPY deploy-projects.json ./
 COPY lib ./lib
 COPY routes ./routes
 

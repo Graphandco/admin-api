@@ -1,0 +1,6 @@
+{
+  "projects": [
+    { "id": "convert-image", "label": "Convert Image", "path": "/var/www/docker-stack/apps/convert-image", "repo": "Graphandco/convert-image" },
+    { "id": "o2-dentaire", "label": "O2 Dentaire", "path": "/var/www/docker-stack/nextapps/o2-dentaire", "repo": "Graphandco/o2-dentaire" }
+  ]
+}

@@ -18,6 +18,7 @@ const sitesRoutes = require('./routes/sites');
 const systemRoutes = require('./routes/system');
 const backupsRoutes = require('./routes/backups');
 const nasRoutes = require('./routes/nas');
+const deployRoutes = require('./routes/deploy');
 
 const app = express();
 
@@ -70,6 +71,7 @@ app.use('/api/sites', sitesRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/backups', backupsRoutes);
 app.use('/api/nas', nasRoutes);
+app.use('/api/deploy', deployRoutes);
 
 // 404
 app.use((_, res) => {

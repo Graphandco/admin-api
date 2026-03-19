@@ -21,4 +21,7 @@ module.exports = {
   NAS_UNRAID_SSH_USER: (process.env.NAS_UNRAID_SSH_USER || 'root').trim(),
   NAS_SYNOLOGY_IP: (process.env.NAS_SYNOLOGY_IP || '').trim(),
   NAS_SYNOLOGY_SSH_USER: (process.env.NAS_SYNOLOGY_SSH_USER || 'root').trim(),
+  DEPLOY_PROJECTS_FILE: (process.env.DEPLOY_PROJECTS_FILE || '').trim() || null,
+  DEPLOY_RUNNER_IMAGE: (process.env.DEPLOY_RUNNER_IMAGE || 'deploy-runner').trim(),
+  GH_TOKEN: (process.env.GH_TOKEN || '').trim(),
 };

@@ -30,6 +30,8 @@ services:
       - WP_CLI_CONTAINER=${WP_CLI_CONTAINER:-wordpress-wpcli}
       - RESTIC_REPOSITORY=${RESTIC_REPOSITORY:-}
       - RESTIC_PASSWORD=${RESTIC_PASSWORD:-}
+      - DEPLOY_RUNNER_IMAGE=${DEPLOY_RUNNER_IMAGE:-deploy-runner}
+      - GH_TOKEN=${GH_TOKEN:-}
     cpus: 0.5
     mem_limit: 256m
     security_opt:
