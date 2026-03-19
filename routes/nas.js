@@ -52,13 +52,42 @@ function parseFree(stdout) {
   return { total, used, available, percent };
 }
 
-function parseLoadavg(stdout) {
-  const parts = stdout.trim().split(/\s+/);
-  return {
-    load1: parseFloat(parts[0]) || 0,
-    load5: parseFloat(parts[1]) || 0,
-    load15: parseFloat(parts[2]) || 0,
-  };
+/** Partitions principales à prioriser : Unraid /mnt/user, Synology /volume1, etc. */
+const PREFERRED_MOUNTS = ['/mnt/user', '/volume1', '/mnt/cache', '/volume2', '/'];
+
+function parseDf(stdout) {
+  const lines = stdout.trim().split('\n').slice(1); // skip header
+  const entries = [];
+
+  for (const line of lines) {
+    const parts = line.split(/\s+/).filter(Boolean);
+    if (parts.length < 6) continue;
+    const mounted = parts[parts.length - 1];
+    const usePct = parts[parts.length - 2];
+    const available = parseInt(parts[parts.length - 3], 10);
+    const used = parseInt(parts[parts.length - 4], 10);
+    const total = parseInt(parts[parts.length - 5], 10);
+
+    if (isNaN(total) || isNaN(used) || usePct === '-') continue;
+
+    const totalBytes = total * 1024 * 1024;
+    const usedBytes = used * 1024 * 1024;
+    const percent = total > 0 ? Math.round((used / total) * 100) : 0;
+
+    entries.push({
+      mount: mounted,
+      total: totalBytes,
+      used: usedBytes,
+      available: available * 1024 * 1024,
+      percent,
+    });
+  }
+
+  for (const m of PREFERRED_MOUNTS) {
+    const found = entries.find((e) => e.mount === m);
+    if (found) return found;
+  }
+  return entries[0] || { total: 0, used: 0, available: 0, percent: 0, mount: '' };
 }
 
 function parseUptime(stdout) {
@@ -85,14 +114,14 @@ async function fetchNasStats(ip, user, sshDir, name) {
   const sshUser = user || 'root';
 
   try {
-    const cmd = "free -m | head -2; echo '---LOAD---'; cat /proc/loadavg; echo '---UPTIME---'; cat /proc/uptime";
+    const cmd = "free -m | head -2; echo '---DF---'; df -m; echo '---UPTIME---'; cat /proc/uptime";
     const { stdout } = await runSshCmd(sshDir, sshUser, ip, cmd);
 
-    const [memBlock, rest] = stdout.split('---LOAD---').map((s) => s.trim());
-    const [loadPart, uptimePart] = (rest || '').split('---UPTIME---').map((s) => s.trim());
+    const [memBlock, rest1] = stdout.split('---DF---').map((s) => s.trim());
+    const [dfBlock, uptimePart] = (rest1 || '').split('---UPTIME---').map((s) => s.trim());
 
     const mem = parseFree(memBlock || '');
-    const loadavg = parseLoadavg(loadPart || '');
+    const disk = parseDf(dfBlock || '');
     const uptimeSeconds = parseUptime(uptimePart || '0');
 
     return {
@@ -108,10 +137,14 @@ async function fetchNasStats(ip, user, sshDir, name) {
           usedFormatted: formatBytes(mem.used),
           totalFormatted: formatBytes(mem.total),
         },
-        loadavg: {
-          load1: loadavg.load1,
-          load5: loadavg.load5,
-          load15: loadavg.load15,
+        disk: {
+          used: disk.used,
+          total: disk.total,
+          available: disk.available,
+          percent: disk.percent,
+          usedFormatted: formatBytes(disk.used),
+          totalFormatted: formatBytes(disk.total),
+          mount: disk.mount || '',
         },
       },
     };
@@ -136,7 +169,7 @@ async function fetchNasStats(ip, user, sshDir, name) {
 }
 
 /**
- * GET /stats - RAM, CPU (loadavg), uptime pour Unraid et Synology
+ * GET /stats - RAM, disque (partitions principales), uptime pour Unraid et Synology
  */
 router.get('/stats', async (req, res) => {
   try {
