@@ -11,6 +11,8 @@ services:
       - "${ADMIN_API_HOST:-127.0.0.1}:${ADMIN_API_HOST_PORT:-3009}:${ADMIN_API_PORT:-3000}"
     volumes:
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+      # Logs Caddy (tail) — même chemin que le conteneur caddy
+      - /var/log/caddy:/var/log/caddy:ro
       # Stats VPS : accès aux métriques du HÔTE (pas du conteneur)
       - /proc:/hostproc:ro
       - /:/hostfs:ro
@@ -32,6 +34,9 @@ services:
       - RESTIC_PASSWORD=${RESTIC_PASSWORD:-}
       - DEPLOY_RUNNER_IMAGE=${DEPLOY_RUNNER_IMAGE:-deploy-runner}
       - GH_TOKEN=${GH_TOKEN:-}
+      - CADDY_ADMIN_URL=${CADDY_ADMIN_URL:-http://caddy:2019}
+      - CADDY_CONTAINER_NAME=${CADDY_CONTAINER_NAME:-caddy}
+      - CADDY_LOG_DIR=${CADDY_LOG_DIR:-/var/log/caddy}
     cpus: 0.5
     mem_limit: 256m
     security_opt:

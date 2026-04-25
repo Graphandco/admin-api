@@ -24,4 +24,9 @@ module.exports = {
   DEPLOY_PROJECTS_FILE: (process.env.DEPLOY_PROJECTS_FILE || '').trim() || null,
   DEPLOY_RUNNER_IMAGE: (process.env.DEPLOY_RUNNER_IMAGE || 'deploy-runner').trim(),
   GH_TOKEN: (process.env.GH_TOKEN || '').trim(),
+  /** Base URL de l'API d'administration Caddy (réseau Docker interne) */
+  CADDY_ADMIN_URL: (process.env.CADDY_ADMIN_URL || 'http://caddy:2019').replace(/\/$/, ''),
+  CADDY_CONTAINER_NAME: (process.env.CADDY_CONTAINER_NAME || 'caddy').trim(),
+  /** Logs fichiers (tail) : même chemin que le volume caddy, monté en ro sur admin-api */
+  CADDY_LOG_DIR: (process.env.CADDY_LOG_DIR || '/var/log/caddy').trim(),
 };

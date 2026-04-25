@@ -158,6 +158,23 @@ router.post('/container/:id/stop', async (req, res) => {
 });
 
 /**
+ * POST /container/:id/restart - Redémarrer un conteneur
+ */
+router.post('/container/:id/restart', async (req, res) => {
+  try {
+    const container = docker.getContainer(req.params.id);
+    await container.restart();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('docker restart error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Erreur au redémarrage du conteneur',
+    });
+  }
+});
+
+/**
  * POST /container/:id/remove - Supprimer un conteneur
  */
 router.post('/container/:id/remove', async (req, res) => {
