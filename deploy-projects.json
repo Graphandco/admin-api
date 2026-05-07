@@ -17,6 +17,24 @@
          "label": "O2 Dentaire",
          "path": "/var/www/docker-stack/nextapps/o2-dentaire",
          "repo": "Graphandco/o2-dentaire"
+      },
+      {
+         "id": "lucelle-app",
+         "label": "Lucelle App",
+         "path": "/var/www/docker-stack/nextapps/lucelle-app",
+         "repo": "Graphandco/lucelle-app-supabase"
+      },
+      {
+         "id": "infirmiere68000",
+         "label": "Infirmière 68000",
+         "path": "/var/www/docker-stack/nextapps/infirmiere68000",
+         "repo": "Graphandco/infirmiere68000"
+      },
+      {
+         "id": "elsass-compta",
+         "label": "Elsass Compta",
+         "path": "/var/www/docker-stack/nextapps/elsass-compta",
+         "repo": "Graphandco/elsass-compta"
       }
    ]
 }
